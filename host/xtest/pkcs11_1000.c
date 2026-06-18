@@ -1162,6 +1162,60 @@ static CK_ATTRIBUTE cktest_session_object[] = {
 	{ CKA_VALUE,	(void *)cktest_aes128_key, sizeof(cktest_aes128_key) },
 };
 
+static void log_create_object_template_cka_token(const char *tag,
+						 CK_ATTRIBUTE_PTR tmpl,
+						 CK_ULONG count)
+{
+	CK_ULONG i = 0;
+
+	Do_ADBG_Log("%s: template=%p count=%lu", tag, tmpl,
+		    (unsigned long)count);
+
+	for (i = 0; i < count; i++) {
+		CK_ATTRIBUTE *attr = &tmpl[i];
+		const unsigned char *bytes = attr->pValue;
+		CK_BBOOL token = 0;
+
+		Do_ADBG_Log("%s: attr[%lu] type=0x%08lx pValue=%p ulValueLen=%lu",
+			    tag, (unsigned long)i, (unsigned long)attr->type,
+			    attr->pValue, (unsigned long)attr->ulValueLen);
+
+		if (!attr->pValue || !attr->ulValueLen)
+			continue;
+
+		if (attr->type == CKA_TOKEN) {
+			memcpy(&token, attr->pValue,
+			       MIN(sizeof(token), attr->ulValueLen));
+
+			Do_ADBG_Log("%s: attr[%lu] CKA_TOKEN decoded=%s raw=0x%02x size=%lu",
+				    tag, (unsigned long)i,
+				    token == CK_TRUE ? "CK_TRUE" :
+				    token == CK_FALSE ? "CK_FALSE" : "INVALID",
+				    (unsigned int)*(const unsigned char *)attr->pValue,
+				    (unsigned long)sizeof(CK_BBOOL));
+		}
+
+		if (attr->ulValueLen <= 16) {
+			char dump[16 * 3 + 1] = { 0 };
+			size_t off = 0;
+			CK_ULONG j = 0;
+
+			for (j = 0; j < attr->ulValueLen &&
+				    off + 4 < sizeof(dump); j++) {
+				int n = snprintf(dump + off, sizeof(dump) - off,
+						 "%s%02x", j ? " " : "", bytes[j]);
+
+				if (n < 0)
+					break;
+				off += (size_t)n;
+			}
+
+			Do_ADBG_Log("%s: attr[%lu] raw-bytes=%s",
+				    tag, (unsigned long)i, dump);
+		}
+	}
+}
+
 /* Create session object and token object from a session */
 static void test_create_destroy_single_object(ADBG_Case_t *c, bool persistent)
 {
@@ -1223,9 +1277,16 @@ static void test_create_destroy_session_objects(ADBG_Case_t *c)
 		goto out;
 
 	for (n = 0; n < ARRAY_SIZE(obj_hdl); n++) {
+		log_create_object_template_cka_token("test_create_destroy_session_objects/loop",
+						     cktest_session_object,
+						     ARRAY_SIZE(cktest_session_object));
+
 		rv = C_CreateObject(session, cktest_session_object,
 				    ARRAY_SIZE(cktest_session_object),
 				    obj_hdl + n);
+
+		Do_ADBG_Log("test_create_destroy_session_objects/loop: iter=%zu rv=0x%08lx obj=%lu",
+			    n, (unsigned long)rv, (unsigned long)obj_hdl[n]);
 
 		if (rv == CKR_DEVICE_MEMORY || !ADBG_EXPECT_CK_OK(c, rv))
 			break;
@@ -1240,9 +1301,16 @@ static void test_create_destroy_session_objects(ADBG_Case_t *c)
 	if (!ADBG_EXPECT_CK_OK(c, rv))
 		goto out;
 
+	log_create_object_template_cka_token("test_create_destroy_session_objects/reopen",
+					     cktest_session_object,
+					     ARRAY_SIZE(cktest_session_object));
+
 	rv = C_CreateObject(session, cktest_session_object,
 			    ARRAY_SIZE(cktest_session_object),
 			    obj_hdl);
+
+	Do_ADBG_Log("test_create_destroy_session_objects/reopen: rv=0x%08lx obj=%lu",
+		    (unsigned long)rv, (unsigned long)obj_hdl[0]);
 
 	ADBG_EXPECT_CK_OK(c, rv);
 
